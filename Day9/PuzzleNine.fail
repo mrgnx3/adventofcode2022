@@ -1,0 +1,273 @@
+package main
+
+import (
+	"2022/utils"
+	"log"
+	"strconv"
+	"strings"
+)
+
+/*
+Puzzle input
+Hypothetical series of motions
+
+H = Head
+T = Tail
+
+find head
+find tail
+move head 1
+move tail 1 to follow
+*/
+
+type command struct {
+	Direction string
+	Distance  int
+}
+type knots struct {
+	Head position
+	Tail position
+}
+
+type position struct {
+	GridPositionX int
+	GridPositionY int
+	StartPoint    bool
+}
+
+type grid struct {
+	Positions [][]position
+	Knots     *knots
+}
+
+func (g *grid) navigate(commands []command) {
+	x, y := startingPoint(g, commands)
+	g.Positions[x][y].StartPoint = true
+
+	for _, command := range commands {
+		switch command.Direction {
+		case "U":
+			for i := x - command.Distance; i < x; i++ {
+				g.Knots = &knots{
+					Head: position{
+						GridPositionX: i,
+						GridPositionY: y,
+						StartPoint:    false,
+					},
+					Tail: position{
+						GridPositionX: i + 1,
+						GridPositionY: y,
+						StartPoint:    true,
+					},
+				}
+
+				if i < len(g.Positions) && y < len(g.Positions[0]) {
+					g.Positions[i+1][y].StartPoint = true
+				}
+			}
+			x -= command.Distance - 1
+			g.print()
+
+		case "D":
+			for i := x; i < x+command.Distance; i++ {
+				g.Knots = &knots{
+					Head: position{
+						GridPositionX: i,
+						GridPositionY: y,
+						StartPoint:    false,
+					},
+					Tail: position{
+						GridPositionX: i - 1,
+						GridPositionY: y,
+						StartPoint:    true,
+					},
+				}
+				if i > 0 && y < len(g.Positions[0]) {
+					g.Positions[i-1][y].StartPoint = true
+				}
+			}
+			x += command.Distance - 1
+			g.print()
+		case "L":
+			for i := y - command.Distance; i < y; i++ {
+				g.Knots = &knots{
+					Head: position{
+						GridPositionX: x,
+						GridPositionY: i,
+						StartPoint:    false,
+					},
+					Tail: position{
+						GridPositionX: x,
+						GridPositionY: i + 1,
+						StartPoint:    true,
+					},
+				}
+				if i < len(g.Positions[0]) && x < len(g.Positions) {
+					g.Positions[x][i+1].StartPoint = true
+				}
+
+			}
+			y -= command.Distance - 1
+			g.print()
+
+		default:
+			for i := y; i < y+command.Distance; i++ {
+				g.Knots = &knots{
+					Head: position{
+						GridPositionX: x,
+						GridPositionY: i,
+						StartPoint:    false,
+					},
+					Tail: position{
+						GridPositionX: x,
+						GridPositionY: i - 1,
+						StartPoint:    true,
+					},
+				}
+				if i > 0 && x < len(g.Positions) {
+					g.Positions[x][i-1].StartPoint = true
+				}
+			}
+			y += command.Distance - 1
+			g.print()
+		}
+	}
+}
+
+func (g *grid) countStart() int {
+	count := 0
+	for _, row := range g.Positions {
+		for _, col := range row {
+			if col.StartPoint {
+				count += 1
+			}
+		}
+	}
+	return count
+}
+
+func (g *grid) print() {
+	log.Print("***********************")
+	for i, _ := range g.Positions {
+		var row []string
+		for j, _ := range g.Positions[i] {
+			if g.Positions[i][j].StartPoint {
+				row = append(row, "#")
+			} else {
+				row = append(row, ".")
+			}
+		}
+		log.Printf(strings.Join(row, ","))
+	}
+	log.Print("***********************")
+}
+
+func startingPoint(g *grid, commands []command) (int, int) {
+	firstLR := -1
+	firstUD := -1
+	for _, command := range commands {
+		if firstUD != -1 && firstLR != -1 {
+			break
+		}
+		switch command.Direction {
+		case "R":
+			firstLR = 0
+		case "L":
+			firstLR = len(g.Positions[0]) - 1
+
+		case "U":
+			firstUD = len(g.Positions) - 1
+		default:
+			firstUD = 0
+		}
+	}
+	return firstUD, firstLR
+}
+
+func buildGrid(commands []command) grid {
+	high, low := findHeight(commands)
+	left, right := findWidth(commands)
+
+	var g grid
+	for i, _ := range utils.GetRange(high, low) {
+		var row []position
+		for j, _ := range utils.GetRange(left, right) {
+			row = append(row, position{
+				GridPositionX: i,
+				GridPositionY: j,
+				StartPoint:    false,
+			})
+		}
+		g.Positions = append(g.Positions, row)
+	}
+	return g
+}
+
+func findHeight(commands []command) (int, int) {
+	highest, lowest := 100, 0
+	height := 0
+	for _, command := range commands {
+		if command.Direction == "U" {
+			height -= command.Distance
+			if height < highest {
+				highest = height
+			}
+		}
+		if command.Direction == "D" {
+			height += command.Distance
+			if height > lowest {
+				lowest = height
+			}
+		}
+	}
+	return highest, lowest
+}
+
+func findWidth(commands []command) (int, int) {
+	left, right := 100, 0
+	width := 0
+	for _, command := range commands {
+		if command.Direction == "R" {
+			width += command.Distance
+			if width > right {
+				right = width
+			}
+		}
+		if command.Direction == "L" {
+			width -= command.Distance
+			if width < left {
+				left = width
+			}
+		}
+	}
+	return left, right
+}
+
+func buildCommands(lines []string) []command {
+	var commands []command
+	for _, line := range lines {
+		l := strings.Split(line, " ")
+		dist, _ := strconv.Atoi(l[1])
+		commands = append(commands, command{
+			Direction: l[0],
+			Distance:  dist,
+		})
+	}
+	return commands
+}
+
+func PuzzleNine() map[string]int {
+	input := utils.ReadInput(utils.GetWD() + "/Day9/data/test.txt")
+	//input := utils.ReadInput(utils.GetWD() + "/Day9/data/input.txt")
+	commands := buildCommands(input)
+	g := buildGrid(commands)
+	g.navigate(commands)
+
+	ans1 := g.countStart()
+
+	return map[string]int{"ans1": ans1, "ans2": 2}
+}
+
+func main() {
+	log.Printf("PuzzleNine(): %v", PuzzleNine())
+}
